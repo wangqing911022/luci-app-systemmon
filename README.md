@@ -4,7 +4,7 @@
 展示本机 CPU / 内存 / 温度、PON 光模块温度与收发光功率，以及局域网内其它设备的在线状态。
 
 * 纯 Shell（busybox ash）+ 静态页面，无编译产物，`PKGARCH:=all`
-* 同一份源码既能打成 **.ipk**（opkg / OpenWrt 23.05 及更早），也能打成 **.apk**（apk-tools 3 / 24.10+）
+* 同一份源码既能打成 **.ipk**（opkg / OpenWrt 23.05、24.10 及各衍生版），也能打成 **.apk**（apk-tools 3 / OpenWrt 主线、snapshot）
 * 没有常驻采集进程：指标按请求即时采集，设备探测结果按 `device_interval` 缓存，空闲时几乎零开销
 * 页面无任何外部依赖（不引用 CDN），断网也能正常打开
 * 默认中文，跟随系统深色/浅色模式
@@ -46,9 +46,10 @@ src-git systemmon https://github.com/wangqing911022/luci-app-systemmon.git
 ./scripts/feeds update systemmon
 ./scripts/feeds install -a -p systemmon
 ```
-### 2. 安装 .apk（OpenWrt 24.10+ / 本仓库固件）
+### 2. 安装 .apk（apk-tools 3 的固件，即 OpenWrt 主线 / snapshot 及衍生版）
 
-用 GitHub Actions 里的 `BUILD-PKG` 工作流（或任意 24.10 SDK）构建：
+用 GitHub Actions 里的 `BUILD-PKG` 工作流构建（apk 一档使用 snapshot SDK，
+因为官方 24.10 SDK 仍是 opkg，只能出 ipk）：
 
 ```sh
 scp systemmon-1.3.0-r1.apk luci-app-systemmon-1.3.0-r1.apk root@192.168.1.1:/tmp/
@@ -85,7 +86,7 @@ opkg install systemmon_1.3.0-1_all.ipk luci-app-systemmon_1.3.0-1_all.ipk
 
 ### 4. 通用安装包（任何 OpenWrt，无需 opkg/apk）
 
-适合 24.10+（apk）、没有 LuCI 的精简固件、或不想等 CI 的场景。纯文件拷贝，不注册包管理器。
+适合 apk 系固件、没有 LuCI 的精简固件、或不想等 CI 的场景。纯文件拷贝，不注册包管理器。
 
 ```powershell
 # PC 上生成（产物在 dist/systemmon-1.3.0-manual.tar.gz）
@@ -287,12 +288,13 @@ option command 'ponctl -d pon0 status --json | sed -n "s/.*\"rx_power_dbm\": *\(
 
 | 目标 | 方法 |
 | --- | --- |
-| `.ipk` / `.apk`（官方格式） | GitHub Actions → `BUILD-PKG` 工作流（23.05 SDK 出 ipk，24.10 SDK 出 apk） |
+| `.ipk` / `.apk`（官方格式） | GitHub Actions → `BUILD-PKG` 工作流（23.05 SDK 出 ipk，snapshot SDK 出 apk） |
 | `.ipk`（本机无工具链） | `Tools/build-ipk.ps1` |
 | `.apk`（设备上有 apk mkpkg） | `Tools/mkpkg-on-device.sh` |
 | 编译进固件 | `CONFIG_PACKAGE_systemmon=y` |
 
-`BUILD-PKG.yml` 里的 SDK 地址写死为 `23.05.5` 与 `24.10.4`，升级时改 `sdk_url` 即可。
+`BUILD-PKG.yml` 里 ipk 一档的 SDK 地址写死为 `23.05.5`；apk 一档在运行时从
+`downloads.openwrt.org/snapshots/targets/x86/64/` 解析最新的 SDK 文件名，无需手工维护。
 
 ## 目录结构
 
