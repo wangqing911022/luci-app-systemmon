@@ -3,10 +3,11 @@
 # 说明：
 #   * 软件包是纯脚本 + 静态资源（PKGARCH:=all），因此用 x86/64 SDK 就能构建，
 #     产物可直接安装到 aarch64 的 XG-040G-MD 上。
-#   * 包格式由 SDK 自带工具链决定：23.05 SDK -> opkg/ipk，24.10 SDK -> apk。
+#   * 包格式由 SDK 决定：23.05 SDK 内置 opkg/ipkg；只有 apk-tools 3 的
+#     snapshot SDK 才能产出 .apk（24.10 官方 SDK 仍是 opkg）。
 #   * 产物在 Actions 运行页面的 Artifacts 里下载。
 #
-# 修改 SDK 版本时，同步更新下面两处 sdk_url。
+# snapshot SDK 的文件名每天会随 gcc 版本变化，因此在流水线里动态解析。
 
 name: BUILD-PKG
 
@@ -35,7 +36,7 @@ jobs:
             sdk_file: sdk.tar.xz
           - name: apk
             kind: apk
-            sdk_url: https://downloads.openwrt.org/releases/24.10.4/targets/x86/64/openwrt-sdk-24.10.4-x86-64_gcc-13.3.0_musl.Linux-x86_64.tar.zst
+            sdk_url: ''
             sdk_flag: --zstd -xf
             sdk_file: sdk.tar.zst
 
@@ -50,7 +51,14 @@ jobs:
 
       - name: 下载并解压 SDK
         run: |
-          curl -fsSL --retry 3 -o "${{ matrix.sdk_file }}" "${{ matrix.sdk_url }}"
+          url="${{ matrix.sdk_url }}"
+          if [ -z "$url" ]; then
+            base=https://downloads.openwrt.org/snapshots/targets/x86/64
+            file=$(curl -fsSL "$base/" | grep -o 'openwrt-sdk-[^"]*Linux-x86_64\.tar\.zst' | head -n1)
+            echo "snapshot SDK: $file"
+            url="$base/$file"
+          fi
+          curl -fsSL --retry 5 --retry-all-errors -o "${{ matrix.sdk_file }}" "$url"
           mkdir -p sdk
           tar ${{ matrix.sdk_flag }} "${{ matrix.sdk_file }}" -C sdk --strip-components=1
           rm -f "${{ matrix.sdk_file }}"
@@ -63,9 +71,12 @@ jobs:
       - name: 准备 feeds 与配置
         run: |
           cd sdk
-          ./scripts/feeds update -a
+          ./scripts/feeds update -a || { sleep 30; ./scripts/feeds update -a; }
           ./scripts/feeds install -a
+          # 新版本（apk）只在 CONFIG_PACKAGE_xxx=y 时才真正打包，必须显式勾选
+          printf 'CONFIG_PACKAGE_systemmon=y\nCONFIG_PACKAGE_luci-app-systemmon=y\n' >> .config
           make defconfig
+          grep -E 'CONFIG_PACKAGE_(luci-app-systemmon|systemmon)=' .config
 
       - name: 编译
         run: |
