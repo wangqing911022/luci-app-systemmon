@@ -15,6 +15,17 @@ PKG_MAINTAINER:=WQ
 
 include $(INCLUDE_DIR)/package.mk
 
+# 纯文件包：没有源码、没有构建系统，必须显式覆盖 Prepare/Compile，
+# 否则框架会在空的 PKG_BUILD_DIR 里执行 make 并报
+# "No targets specified and no makefile found"。
+define Build/Prepare
+	mkdir -p $(PKG_BUILD_DIR)
+endef
+
+define Build/Compile
+	true
+endef
+
 define Package/systemmon
   SECTION:=admin
   CATEGORY:=Administration
