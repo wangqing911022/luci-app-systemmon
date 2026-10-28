@@ -1,0 +1,3 @@
+# luci-app-systemmon
+
+init
