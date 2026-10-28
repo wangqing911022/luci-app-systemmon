@@ -63,7 +63,7 @@ apk add --allow-untrusted /tmp/systemmon-1.3.0-r1.apk /tmp/luci-app-systemmon-1.
 sh Tools/mkpkg-on-device.sh /tmp
 ```
 
-### 3. 安装 .ipk（OpenWrt 23.05 及更早）
+### 3. 安装 .ipk（opkg 系固件，含 23.05、24.10 及 ImmortalWrt）
 
 Windows 本机无需工具链即可打包：
 
