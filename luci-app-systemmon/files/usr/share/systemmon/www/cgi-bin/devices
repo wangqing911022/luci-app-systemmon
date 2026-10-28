@@ -1,0 +1,19 @@
+#!/bin/sh
+# GET  /cgi-bin/devices —— 局域网设备状态（带 device_interval 缓存）
+# POST 不支持
+
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+. /usr/libexec/systemmon/common.sh
+. /usr/libexec/systemmon/devices.sh
+
+sm_guard
+
+case "${REQUEST_METHOD:-GET}" in
+	GET|HEAD) ;;
+	OPTIONS) sm_headers '' cors; exit 0 ;;
+	*) sm_fail '405 Method Not Allowed' '只支持 GET' ;;
+esac
+
+sm_headers '' cors
+sm_devices_json
+printf '\n'

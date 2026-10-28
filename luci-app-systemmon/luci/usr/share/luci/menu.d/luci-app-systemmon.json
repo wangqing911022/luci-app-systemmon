@@ -1,0 +1,10 @@
+{
+	"admin/status/systemmon": {
+		"title": "设备监控",
+		"order": 60,
+		"action": {
+			"type": "view",
+			"path": "systemmon/overview"
+		}
+	}
+}

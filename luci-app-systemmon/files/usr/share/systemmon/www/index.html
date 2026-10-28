@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>设备监控</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="app.css?v=1.2.0">
+</head>
+<body>
+<div class="app">
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="22" height="22"><path d="M3 17h4V9H3v8zm7 0h4V4h-4v13zm7 0h4v-6h-4v6z" fill="currentColor"/></svg>
+      </span>
+      <span class="title">设备监控</span>
+      <span class="chip" id="hostName">连接中…</span>
+    </div>
+    <div class="actions">
+      <span class="stamp" id="stamp">—</span>
+      <button type="button" class="btn ghost" id="btnPause">暂停</button>
+      <button type="button" class="btn" id="btnSettings">设置</button>
+    </div>
+  </header>
+
+  <div class="nodes" id="nodeBar" hidden></div>
+
+  <div class="banner" id="banner" hidden></div>
+
+  <section class="kpis" id="kpis">
+    <div class="kpi" data-kpi="cpu">
+      <span class="kpi-label">CPU 占用</span>
+      <span class="kpi-value" id="kpiCpu">—</span>
+      <span class="kpi-sub" id="kpiCpuSub">—</span>
+    </div>
+    <div class="kpi" data-kpi="mem">
+      <span class="kpi-label">内存占用</span>
+      <span class="kpi-value" id="kpiMem">—</span>
+      <span class="kpi-sub" id="kpiMemSub">—</span>
+    </div>
+    <div class="kpi" data-kpi="temp">
+      <span class="kpi-label">CPU 温度</span>
+      <span class="kpi-value" id="kpiTemp">—</span>
+      <span class="kpi-sub" id="kpiTempSub">—</span>
+    </div>
+    <div class="kpi" data-kpi="rx">
+      <span class="kpi-label">光功率 Rx</span>
+      <span class="kpi-value" id="kpiRx">—</span>
+      <span class="kpi-sub" id="kpiRxSub">—</span>
+    </div>
+    <div class="kpi" data-kpi="ponTemp">
+      <span class="kpi-label">PON 温度</span>
+      <span class="kpi-value" id="kpiPonTemp">—</span>
+      <span class="kpi-sub" id="kpiPonTempSub">—</span>
+    </div>
+    <div class="kpi" data-kpi="dev">
+      <span class="kpi-label">在线设备</span>
+      <span class="kpi-value" id="kpiDev">—</span>
+      <span class="kpi-sub" id="kpiDevSub">—</span>
+    </div>
+  </section>
+
+  <main class="grid">
+
+    <article class="card span6">
+      <header class="card-head">
+        <h2>CPU</h2>
+        <span class="card-tag" id="cpuLoad">负载 —</span>
+      </header>
+      <div class="cpu-body">
+        <div class="ring" id="cpuRing">
+          <span class="ring-value" id="cpuValue">—</span>
+          <span class="ring-label">占用</span>
+        </div>
+        <div class="cpu-side">
+          <canvas id="cpuChart" width="640" height="160" aria-label="CPU 使用率趋势"></canvas>
+          <div class="cores" id="cores"></div>
+        </div>
+      </div>
+    </article>
+
+    <article class="card span3">
+      <header class="card-head"><h2>内存</h2><span class="card-tag" id="memTotal">—</span></header>
+      <div class="mem-body">
+        <div class="donut" id="memDonut"><span id="memPct">—</span></div>
+        <dl class="kv" id="memKv"></dl>
+      </div>
+    </article>
+
+    <article class="card span3">
+      <header class="card-head"><h2>温度</h2><span class="card-tag" id="tempCount">—</span></header>
+      <ul class="temp-list" id="tempList"></ul>
+    </article>
+
+    <article class="card span6">
+      <header class="card-head">
+        <h2>PON / 光模块</h2>
+        <span class="card-tag" id="ponSource">—</span>
+      </header>
+      <div class="pon-grid" id="ponGrid">
+        <div class="pon-cell"><span class="pon-label">光功率 Rx</span><strong id="ponRx">—</strong></div>
+        <div class="pon-cell"><span class="pon-label">光功率 Tx</span><strong id="ponTx">—</strong></div>
+        <div class="pon-cell"><span class="pon-label">模块温度</span><strong id="ponTemp">—</strong></div>
+        <div class="pon-cell"><span class="pon-label">PON 状态</span><strong id="ponState">—</strong></div>
+      </div>
+      <div class="pon-meta" id="ponMeta"></div>
+      <canvas id="rxChart" width="640" height="120" aria-label="光功率趋势"></canvas>
+    </article>
+
+    <article class="card span6">
+      <header class="card-head"><h2>网络接口</h2><span class="card-tag">实时速率</span></header>
+      <table class="tbl net">
+        <thead><tr><th>接口</th><th class="r">接收</th><th class="r">发送</th><th class="r">累计</th></tr></thead>
+        <tbody id="netBody"></tbody>
+      </table>
+    </article>
+
+    <article class="card span12">
+      <header class="card-head dev-head">
+        <h2>局域网设备</h2>
+        <div class="seg" id="devTabs">
+          <button type="button" class="seg-btn active" data-tab="mon">已监控 <b id="monCount">0</b></button>
+          <button type="button" class="seg-btn" data-tab="disc">发现 <b id="discCount">0</b></button>
+        </div>
+        <button type="button" class="btn" id="btnAddDev">添加设备</button>
+      </header>
+
+      <form class="quick-add" id="quickAdd" hidden>
+        <input type="text" name="name" placeholder="名称（可选）">
+        <input type="text" name="address" placeholder="IP 或主机名" required>
+        <select name="type">
+          <option value="ping">Ping</option>
+          <option value="tcp">TCP 端口</option>
+        </select>
+        <input type="number" name="port" placeholder="端口" min="0" max="65535">
+        <button type="submit" class="btn primary">添加</button>
+        <button type="button" class="btn ghost" id="btnAddCancel">取消</button>
+        <span class="msg" id="addMsg"></span>
+      </form>
+
+      <div id="monPane">
+        <div class="tbl-wrap">
+          <table class="tbl dev">
+            <thead>
+              <tr>
+                <th>状态</th><th>名称</th><th>地址</th><th>MAC</th>
+                <th>方式</th><th class="r">延迟</th><th class="r">最后在线</th><th class="r">操作</th>
+              </tr>
+            </thead>
+            <tbody id="devBody"></tbody>
+          </table>
+        </div>
+        <p class="hint" id="monHint"></p>
+      </div>
+
+      <div id="discPane" hidden>
+        <div class="disc-bar">
+          <span id="discMeta">还没有扫描</span>
+          <button type="button" class="btn ghost" id="btnScan">重新扫描</button>
+          <button type="button" class="btn" id="btnAddAll" hidden>添加全部在线</button>
+        </div>
+        <div class="tbl-wrap">
+          <table class="tbl dev">
+            <thead>
+              <tr>
+                <th>状态</th><th>名称</th><th>地址</th><th>MAC</th>
+                <th>来源</th><th class="r">延迟</th><th class="r">操作</th>
+              </tr>
+            </thead>
+            <tbody id="discBody"></tbody>
+          </table>
+        </div>
+        <p class="hint" id="discHint"></p>
+      </div>
+    </article>
+
+    <article class="card span12">
+      <header class="card-head"><h2>系统信息</h2><span class="card-tag" id="uptime">—</span></header>
+      <dl class="kv grid4" id="sysKv"></dl>
+    </article>
+
+  </main>
+
+  <footer class="foot">
+    <span>systemmon · 端口 <b id="footPort">7752</b></span>
+    <span><a href="/cgi-bin/diag" target="_blank" rel="noopener">采集自检</a></span>
+  </footer>
+</div>
+
+<div class="drawer" id="drawer" hidden>
+  <div class="drawer-mask" data-close="1"></div>
+  <div class="drawer-panel" role="dialog" aria-modal="true" aria-label="设置">
+    <header class="drawer-head">
+      <h2>设置</h2>
+      <button type="button" class="btn ghost" data-close="1">关闭</button>
+    </header>
+    <div class="drawer-body">
+      <form id="formSettings">
+        <fieldset>
+          <legend>采样</legend>
+          <label>页面刷新间隔（秒）<input type="number" name="refresh" min="1" max="60" step="1"></label>
+          <label>设备探测间隔（秒）<input type="number" name="device_interval" min="1" max="3600" step="1"></label>
+          <label>单次探测超时（秒）<input type="number" name="ping_timeout" min="1" max="10" step="1"></label>
+          <label>最大监控设备数<input type="number" name="max_devices" min="1" max="256" step="1"></label>
+        </fieldset>
+
+        <fieldset>
+          <legend>局域网发现</legend>
+          <label>扫描网段<input type="text" name="scan_subnet" placeholder="留空自动取 br-* 网段，如 192.168.1.0/24"></label>
+          <label>扫描结果缓存（秒）<input type="number" name="scan_interval" min="10" max="3600" step="10"></label>
+          <label>单次最多扫描地址数<input type="number" name="scan_max" min="1" max="2048" step="1"></label>
+          <label class="check"><input type="checkbox" name="discover_leases"> 合并 DHCP 租约里的名称与 MAC</label>
+          <label class="check"><input type="checkbox" name="discover_arp"> 合并 ARP 表中不响应 ICMP 的设备</label>
+        </fieldset>
+
+        <fieldset>
+          <legend>远程节点</legend>
+          <p class="hint" style="margin:2px 0 10px">
+            其它设备可以用三种方式接入：<b>插件</b>（对方也装了本插件，指标最全）、
+            <b>SSH</b> / <b>Telnet</b>（对方不装插件，用账号密码读取 CPU/内存/温度/PON）。
+          </p>
+          <ul class="node-list" id="nodeList"></ul>
+          <div class="node-add">
+            <select name="node_type" id="nodeType">
+              <option value="plugin">插件（URL）</option>
+              <option value="ssh">SSH</option>
+              <option value="telnet">Telnet</option>
+            </select>
+            <input type="text" name="node_name" placeholder="名称">
+            <input type="text" name="node_url" id="nodeUrl" placeholder="http://IP:7752">
+            <input type="text" name="node_host" id="nodeHost" placeholder="IP 地址" hidden>
+            <input type="number" name="node_port" id="nodePort" placeholder="端口" min="1" max="65535" hidden>
+            <input type="text" name="node_user" id="nodeUser" placeholder="用户名">
+            <input type="password" name="node_pass" id="nodePass" placeholder="密码">
+            <button type="button" class="btn" id="btnNodeAdd">添加节点</button>
+          </div>
+          <span class="msg" id="nodeMsg"></span>
+        </fieldset>
+
+        <fieldset>
+          <legend>访问控制</legend>
+          <label>Basic 认证用户名<input type="text" name="auth_user" autocomplete="username" placeholder="留空表示不启用"></label>
+          <label>密码<input type="password" name="auth_password" autocomplete="new-password" placeholder="留空表示保持不变"></label>
+          <label>允许网段<input type="text" name="allow_cidr" placeholder="例如 192.168.1.0/24，留空表示不限制"></label>
+        </fieldset>
+
+        <fieldset>
+          <legend>PON 采集</legend>
+          <label class="check"><input type="checkbox" name="pon_enabled"> 启用 PON 光模块采集</label>
+          <label>ponctl 设备名<input type="text" name="pon_device" placeholder="留空自动识别，例如 pon0"></label>
+          <label>SFP 网口（无 ponctl 时）<input type="text" name="pon_sfp_iface" placeholder="例如 eth0.4094"></label>
+          <label>自定义采集命令<textarea name="pon_command" rows="3" placeholder="输出 key=value 行，例如：&#10;temp=45.2&#10;rx=-18.5&#10;tx=2.1&#10;state=O5"></textarea></label>
+        </fieldset>
+
+        <div class="form-actions">
+          <button type="submit" class="btn primary">保存设置</button>
+          <span class="form-msg" id="formMsg"></span>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script src="app.js?v=1.2.0"></script>
+</body>
+</html>

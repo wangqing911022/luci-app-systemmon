@@ -1,0 +1,65 @@
+#!/bin/sh
+# GET /cgi-bin/diag —— 采集环境自检（排查 PON 数据源用）
+
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+. /usr/libexec/systemmon/common.sh
+
+sm_guard
+
+sm_headers 'text/plain; charset=utf-8'
+
+echo "== systemmon diag =="
+date 2>/dev/null
+uname -a 2>/dev/null
+echo
+
+echo "== ponctl =="
+if command -v ponctl >/dev/null 2>&1; then
+	echo "path: $(command -v ponctl)"
+	echo "-- list --"
+	sm_timeout 5 ponctl list 2>&1 | head -n 10
+	dev=$(sm_pon_cfg device '')
+	[ -n "$dev" ] || dev=$(sm_timeout 5 ponctl list 2>/dev/null | sed -n 's/^device=\([^ ]*\).*/\1/p' | head -n 1)
+	if [ -n "$dev" ]; then
+		echo "-- status --json (${dev}) --"
+		sm_timeout 5 ponctl --device "$dev" status --json 2>&1 | head -c 3000
+		echo
+	fi
+else
+	echo "ponctl: 未找到"
+fi
+echo
+
+echo "== thermal zones =="
+for z in /sys/class/thermal/thermal_zone*; do
+	[ -r "$z/temp" ] || continue
+	echo "$(basename "$z") type=$(cat "$z/type" 2>/dev/null) temp=$(cat "$z/temp" 2>/dev/null)"
+done
+echo
+
+echo "== hwmon =="
+for h in /sys/class/hwmon/hwmon*; do
+	[ -r "$h/name" ] || continue
+	echo "$(basename "$h") name=$(cat "$h/name" 2>/dev/null)"
+	for f in "$h"/temp*_input "$h"/power*_input; do
+		[ -r "$f" ] || continue
+		echo "  $(basename "$f")=$(cat "$f" 2>/dev/null)"
+	done
+done
+echo
+
+echo "== ethtool =="
+if command -v ethtool >/dev/null 2>&1; then
+	iface=$(sm_pon_cfg sfp_iface '')
+	if [ -n "$iface" ]; then
+		sm_timeout 6 ethtool -m "$iface" 2>&1 | head -n 40
+	else
+		echo "未配置 sfp_iface"
+	fi
+else
+	echo "ethtool: 未找到"
+fi
+echo
+
+echo "== uci =="
+uci -q show systemmon 2>/dev/null

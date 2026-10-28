@@ -1,0 +1,23 @@
+#!/bin/sh
+# GET /cgi-bin/discover —— 扫描局域网在线设备（结果带缓存）
+#   ?rescan=1 强制重新扫描
+
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+. /usr/libexec/systemmon/common.sh
+. /usr/libexec/systemmon/devices.sh
+
+sm_guard
+
+case "${REQUEST_METHOD:-GET}" in
+	GET|HEAD) ;;
+	*) sm_fail '405 Method Not Allowed' '只支持 GET' ;;
+esac
+
+rescan=0
+case "${QUERY_STRING:-}" in
+	*rescan=1*) rescan=1 ;;
+esac
+
+sm_headers
+sm_discover_json "$rescan"
+printf '\n'

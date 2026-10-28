@@ -1,0 +1,5 @@
+#!/bin/sh
+# 首次开机/升级后确保服务已启用
+[ -f /etc/config/systemmon ] || exit 0
+[ -x /etc/init.d/systemmon ] && /etc/init.d/systemmon enable
+exit 0

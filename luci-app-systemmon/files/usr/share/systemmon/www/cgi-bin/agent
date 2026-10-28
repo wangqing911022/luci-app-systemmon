@@ -1,0 +1,25 @@
+#!/bin/sh
+# GET /cgi-bin/agent?section=<node> —— SSH / Telnet 节点采集
+# 目标设备不需要安装本插件
+
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+. /usr/libexec/systemmon/common.sh
+. /usr/libexec/systemmon/agent.sh
+
+sm_guard
+
+case "${REQUEST_METHOD:-GET}" in
+	GET|HEAD) ;;
+	*) sm_fail '405 Method Not Allowed' '只支持 GET' ;;
+esac
+
+sec=$(printf '%s' "${QUERY_STRING:-}" | sed -n 's/.*section=\([^&]*\).*/\1/p')
+sec=$(sm_urldecode "$sec")
+
+[ -n "$sec" ] || sm_fail '400 Bad Request' '缺少 section'
+[ "$(uci -q get "systemmon.$sec" 2>/dev/null)" = "node" ] ||
+	sm_fail '404 Not Found' '节点不存在'
+
+sm_headers
+sm_agent_json "$sec"
+printf '\n'

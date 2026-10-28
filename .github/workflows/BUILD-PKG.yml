@@ -1,0 +1,85 @@
+# 用官方 SDK 构建 systemmon，分别产出 .ipk（opkg）与 .apk（apk-tools 3）
+#
+# 说明：
+#   * 软件包是纯脚本 + 静态资源（PKGARCH:=all），因此用 x86/64 SDK 就能构建，
+#     产物可直接安装到 aarch64 的 XG-040G-MD 上。
+#   * 包格式由 SDK 自带工具链决定：23.05 SDK -> opkg/ipk，24.10 SDK -> apk。
+#   * 产物在 Actions 运行页面的 Artifacts 里下载。
+#
+# 修改 SDK 版本时，同步更新下面两处 sdk_url。
+
+name: BUILD-PKG
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'luci-app-systemmon/**'
+      - '.github/workflows/BUILD-PKG.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: ipk
+            kind: ipk
+            sdk_url: https://downloads.openwrt.org/releases/23.05.5/targets/x86/64/openwrt-sdk-23.05.5-x86-64_gcc-12.3.0_musl.Linux-x86_64.tar.xz
+            sdk_flag: -xJf
+            sdk_file: sdk.tar.xz
+          - name: apk
+            kind: apk
+            sdk_url: https://downloads.openwrt.org/releases/24.10.4/targets/x86/64/openwrt-sdk-24.10.4-x86-64_gcc-13.3.0_musl.Linux-x86_64.tar.zst
+            sdk_flag: --zstd -xf
+            sdk_file: sdk.tar.zst
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装构建依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential gawk gettext libncurses-dev \
+            unzip file wget rsync zstd python3
+
+      - name: 下载并解压 SDK
+        run: |
+          curl -fsSL --retry 3 -o "${{ matrix.sdk_file }}" "${{ matrix.sdk_url }}"
+          mkdir -p sdk
+          tar ${{ matrix.sdk_flag }} "${{ matrix.sdk_file }}" -C sdk --strip-components=1
+          rm -f "${{ matrix.sdk_file }}"
+
+      - name: 放入软件包
+        run: |
+          cp -r luci-app-systemmon sdk/package/
+          ls -la sdk/package/luci-app-systemmon
+
+      - name: 准备 feeds 与配置
+        run: |
+          cd sdk
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+          make defconfig
+
+      - name: 编译
+        run: |
+          cd sdk
+          make package/luci-app-systemmon/compile V=s -j"$(nproc)"
+
+      - name: 收集产物
+        run: |
+          mkdir -p out
+          find sdk/bin/packages -name '*systemmon*.${{ matrix.kind }}' -exec cp -v {} out/ \;
+          ls -la out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: systemmon-${{ matrix.kind }}
+          path: out/*.${{ matrix.kind }}
+          if-no-files-found: error

@@ -1,0 +1,44 @@
+#!/bin/sh /etc/rc.common
+# systemmon 服务：用 uhttpd（缺失时退化为 busybox httpd）在指定端口发布监控页面
+
+START=95
+STOP=10
+USE_PROCD=1
+
+WWW_DIR=/usr/share/systemmon/www
+
+start_service() {
+	local enabled bind port
+
+	config_load systemmon
+	config_get_bool enabled main enabled 1
+	[ "$enabled" = "1" ] || return 0
+
+	config_get bind main bind "0.0.0.0"
+	config_get port main port "7752"
+
+	# 升级/解包后确保 CGI 可执行
+	[ -x "$WWW_DIR/cgi-bin/status" ] || chmod 755 "$WWW_DIR"/cgi-bin/* 2>/dev/null
+
+	procd_open_instance
+	if [ -x /usr/sbin/uhttpd ]; then
+		# CGI 脚本位于 docroot/cgi-bin 下，这里只需声明 CGI 前缀
+		procd_set_param command /usr/sbin/uhttpd \
+			-f \
+			-h "$WWW_DIR" \
+			-x /cgi-bin \
+			-p "$bind:$port" \
+			-n 8 -N 200 -A 4 -t 30 -T 20
+	else
+		# busybox httpd：docroot 内可执行文件即 CGI
+		procd_set_param command /bin/busybox httpd -f -h "$WWW_DIR" -p "$bind:$port"
+	fi
+	procd_set_param respawn 3600 5 5
+	procd_set_param stdout 1
+	procd_set_param stderr 1
+	procd_close_instance
+}
+
+# 注意：不注册 procd 配置变更触发器。所有选项都是每次请求重新读取的，
+# 而网页保存配置时会执行 uci commit，若触发 reload 会重启 uhttpd，
+# 导致这条保存请求的响应被切断。端口/监听地址变化请手动 restart。

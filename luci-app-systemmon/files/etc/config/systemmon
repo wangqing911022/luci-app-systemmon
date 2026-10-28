@@ -1,0 +1,50 @@
+config systemmon 'main'
+	option enabled '1'
+	option bind '0.0.0.0'
+	option port '7752'
+	# 页面刷新间隔（秒）
+	option refresh '3'
+	# 每台设备的探测间隔（秒）；服务端按页面刷新频率分批轮询，开销更平滑
+	option device_interval '30'
+	# 单个设备探测超时（秒）
+	option ping_timeout '1'
+	# 最多监控设备数量（防止探测过慢）
+	option max_devices '32'
+	# 局域网发现扫描
+	option scan_interval '120'
+	option scan_max '512'
+	# 留空自动取所有 br-* 接口所在网段；也可填 192.168.1.0/24,10.0.0.0/24
+	option scan_subnet ''
+	# 发现时合并 DHCP 租约 / ARP 表中的设备
+	option discover_leases '1'
+	option discover_arp '1'
+	# 访问限制：留空表示不限制；多个网段用逗号分隔，仅支持 IPv4
+	option allow_cidr ''
+	# HTTP Basic 认证：留空表示无需登录
+	option auth_user ''
+	option auth_password ''
+
+config pon 'pon'
+	option enabled '1'
+	# 留空自动识别（ponctl list 的第一个设备）
+	option device ''
+	# 自定义采集命令：输出 key=value 行，可用键见 README
+	option command ''
+	# 无 ponctl 时，可指定 SFP 网口用 ethtool -m 读取
+	option sfp_iface ''
+
+# 手动添加的设备示例（可直接在网页“设置”里增删）
+# config device
+# 	option name 'NAS'
+# 	option address '192.168.1.10'
+# 	option type 'ping'
+# 	option enabled '1'
+
+# 远程节点：另一台也运行本插件的设备（网页“设置 → 远程节点”里添加）
+# 添加后可在页面顶部切换到该节点，查看它的 CPU、内存、温度、PON
+# config node
+# 	option name '客厅路由'
+# 	option url 'http://192.168.1.2:7752'
+# 	option user ''
+# 	option password ''
+# 	option enabled '1'

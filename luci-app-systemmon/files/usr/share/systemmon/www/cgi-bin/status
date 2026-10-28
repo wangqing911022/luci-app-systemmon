@@ -1,0 +1,28 @@
+#!/bin/sh
+# GET /cgi-bin/status —— 本机指标快照
+
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+. /usr/libexec/systemmon/common.sh
+. /usr/libexec/systemmon/system.sh
+. /usr/libexec/systemmon/pon.sh
+
+sm_guard
+
+case "${REQUEST_METHOD:-GET}" in
+	GET|HEAD) ;;
+	OPTIONS) sm_headers '' cors; exit 0 ;;
+	*) sm_fail '405 Method Not Allowed' '只支持 GET' ;;
+esac
+
+refresh=$(sm_clean_uint "$(sm_cfg refresh 3)" 1 60 3)
+port=$(sm_clean_uint "$(sm_cfg port 7752)" 1 65535 7752)
+
+sm_headers '' cors
+printf '{"ok":true,"ts":%s,"refresh":%s,"port":%s,' "$SM_NOW" "$refresh" "$port"
+printf '"host":%s,' "$(sm_host_json)"
+printf '"cpu":%s,' "$(sm_cpu_json)"
+printf '"memory":%s,' "$(sm_mem_json)"
+printf '"temperatures":%s,' "$(sm_temps_json)"
+printf '"pon":%s,' "$(sm_pon_json)"
+printf '"net":%s' "$(sm_net_json)"
+printf '}\n'

@@ -1,0 +1,292 @@
+#!/bin/sh
+# GET  /cgi-bin/config —— 读取当前配置与设备列表
+# POST /cgi-bin/config —— action=add|del|set
+#
+# POST 需要自定义请求头 X-Requested-With: systemmon（跨站表单无法伪造）
+
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+. /usr/libexec/systemmon/common.sh
+
+sm_guard
+
+sm_has_field() {
+	printf '%s' "${SM_BODY:-}" | tr '&' '\n' | grep -q "^$1="
+}
+
+emit_config() {
+	local first=1 sec name addr type port en ig ifirst=1 nfirst=1 nuser npass url ntype nhost nport
+
+	printf '{"ok":true,"main":{'
+	printf '"refresh":%s,' "$(sm_clean_uint "$(sm_cfg refresh 3)" 1 60 3)"
+	printf '"device_interval":%s,' "$(sm_clean_uint "$(sm_cfg device_interval 30)" 1 3600 30)"
+	printf '"ping_timeout":%s,' "$(sm_clean_uint "$(sm_cfg ping_timeout 1)" 1 10 1)"
+	printf '"max_devices":%s,' "$(sm_clean_uint "$(sm_cfg max_devices 32)" 1 256 32)"
+	printf '"scan_interval":%s,' "$(sm_clean_uint "$(sm_cfg scan_interval 120)" 10 3600 120)"
+	printf '"scan_max":%s,' "$(sm_clean_uint "$(sm_cfg scan_max 512)" 1 2048 512)"
+	printf '"scan_subnet":"%s",' "$(sm_jstr "$(sm_cfg scan_subnet '')")"
+	printf '"port":%s,' "$(sm_clean_uint "$(sm_cfg port 7752)" 1 65535 7752)"
+	printf '"discover_leases":%s,' "$(sm_bool discover_leases 1)"
+	printf '"discover_arp":%s,' "$(sm_bool discover_arp 1)"
+	printf '"auth_user":"%s","auth_enabled":%s,' \
+		"$(sm_jstr "$(sm_cfg auth_user '')")" \
+		"$([ -n "$(sm_cfg auth_user '')" ] && echo true || echo false)"
+	printf '"allow_cidr":"%s",' "$(sm_jstr "$(sm_cfg allow_cidr '')")"
+	printf '"ignore":['
+	for ig in $(uci -q get systemmon.main.ignore 2>/dev/null); do
+		printf '%s"%s"' "$([ "$ifirst" = 1 ] || echo ,)" "$(sm_jstr "$ig")"
+		ifirst=0
+	done
+	printf ']'
+	printf '},"pon":{'
+	printf '"enabled":%s,' "$(sm_pon_cfg enabled 1)"
+	printf '"device":"%s",' "$(sm_jstr "$(sm_pon_cfg device '')")"
+	printf '"sfp_iface":"%s",' "$(sm_jstr "$(sm_pon_cfg sfp_iface '')")"
+	printf '"command":"%s"' "$(sm_jstr "$(sm_pon_cfg command '')")"
+	printf '},"devices":['
+
+	for sec in $(sm_device_sections); do
+		name=$(uci -q get "systemmon.$sec.name" 2>/dev/null)
+		addr=$(uci -q get "systemmon.$sec.address" 2>/dev/null)
+		type=$(uci -q get "systemmon.$sec.type" 2>/dev/null)
+		port=$(uci -q get "systemmon.$sec.port" 2>/dev/null)
+		en=$(uci -q get "systemmon.$sec.enabled" 2>/dev/null)
+		[ -n "$type" ] || type=ping
+		[ -n "$port" ] || port=0
+		[ "$en" = "0" ] && en=0 || en=1
+		printf '%s{"section":"%s","name":"%s","address":"%s","type":"%s","port":%s,"enabled":%s}' \
+			"$([ "$first" = 1 ] || echo ,)" \
+			"$(sm_jstr "$sec")" "$(sm_jstr "$name")" "$(sm_jstr "$addr")" \
+			"$(sm_jstr "$type")" "$(sm_num "$port" 0)" "$en"
+		first=0
+	done
+
+	printf '],"nodes":['
+	nfirst=1
+	for sec in $(sm_node_sections); do
+		name=$(uci -q get "systemmon.$sec.name" 2>/dev/null)
+		ntype=$(uci -q get "systemmon.$sec.type" 2>/dev/null)
+		url=$(uci -q get "systemmon.$sec.url" 2>/dev/null)
+		nhost=$(uci -q get "systemmon.$sec.host" 2>/dev/null)
+		nport=$(uci -q get "systemmon.$sec.port" 2>/dev/null)
+		nuser=$(uci -q get "systemmon.$sec.user" 2>/dev/null)
+		npass=$(uci -q get "systemmon.$sec.password" 2>/dev/null)
+		en=$(uci -q get "systemmon.$sec.enabled" 2>/dev/null)
+		[ -n "$ntype" ] || ntype=plugin
+		[ -n "$nport" ] || nport=0
+		[ "$en" = "0" ] && en=0 || en=1
+		printf '%s{"section":"%s","name":"%s","type":"%s","url":"%s","host":"%s","port":%s,"user":"%s","password":"%s","enabled":%s}' \
+			"$([ "$nfirst" = 1 ] || echo ,)" \
+			"$(sm_jstr "$sec")" "$(sm_jstr "$name")" "$(sm_jstr "$ntype")" \
+			"$(sm_jstr "$url")" "$(sm_jstr "$nhost")" "$(sm_num "$nport" 0)" \
+			"$(sm_jstr "$nuser")" "$(sm_jstr "$npass")" "$en"
+		nfirst=0
+	done
+
+	printf ']}'
+}
+
+if [ "${REQUEST_METHOD:-GET}" != "POST" ]; then
+	sm_headers
+	emit_config
+	printf '\n'
+	exit 0
+fi
+
+sm_csrf_ok || sm_fail '403 Forbidden' '跨站请求已拒绝'
+
+SM_BODY=$(sm_body)
+[ -n "$SM_BODY" ] || sm_fail '400 Bad Request' '缺少请求体'
+
+action=$(sm_form_val action)
+sid_new=""
+
+case "$action" in
+	add)
+		name=$(sm_clean_name "$(sm_form_val name)")
+		addr=$(sm_clean_addr "$(sm_form_val address)")
+		type=$(sm_form_val type)
+		port=$(sm_clean_uint "$(sm_form_val port)" 0 65535 0)
+		[ -n "$addr" ] || sm_fail '400 Bad Request' '地址不能为空'
+		existing=$(sm_device_sections)
+		for s in $existing; do
+			[ "$(uci -q get "systemmon.$s.address" 2>/dev/null)" = "$addr" ] &&
+				sm_fail '409 Conflict' '该地址已在监控列表中'
+		done
+		case "$type" in tcp) ;; *) type=ping ;; esac
+		[ -n "$name" ] || name="$addr"
+
+		sid_new=$(uci add systemmon device 2>/dev/null)
+		if [ -z "$sid_new" ]; then
+			sid_new="dev_$(date +%s)"
+			uci -q set "systemmon.$sid_new=device"
+		fi
+		uci -q set "systemmon.$sid_new.name=$name"
+		uci -q set "systemmon.$sid_new.address=$addr"
+		uci -q set "systemmon.$sid_new.type=$type"
+		uci -q set "systemmon.$sid_new.enabled=1"
+		if [ "$type" = "tcp" ] && [ "$port" != "0" ]; then
+			uci -q set "systemmon.$sid_new.port=$port"
+		fi
+		;;
+	del)
+		sec=$(sm_form_val section)
+		addr=$(sm_clean_addr "$(sm_form_val address)")
+		if [ -z "$sec" ] && [ -n "$addr" ]; then
+			for s in $(sm_device_sections); do
+				[ "$(uci -q get "systemmon.$s.address" 2>/dev/null)" = "$addr" ] && { sec="$s"; break; }
+			done
+		fi
+		[ -n "$sec" ] || sm_fail '400 Bad Request' '缺少 section 或 address'
+		[ "$(uci -q get "systemmon.$sec" 2>/dev/null)" = "device" ] ||
+			sm_fail '400 Bad Request' '目标不是设备条目'
+		uci -q delete "systemmon.$sec"
+		;;
+	node_add)
+		name=$(sm_clean_name "$(sm_form_val name)")
+		ntype=$(sm_form_val type)
+		url=$(sm_form_val url | tr -d ' \t\r\n"' | head -c 200)
+		nhost=$(sm_clean_addr "$(sm_form_val host)")
+		nport=$(sm_clean_uint "$(sm_form_val port)" 0 65535 0)
+		nuser=$(sm_clean_name "$(sm_form_val user)")
+		npass=$(sm_form_val password | tr -d '\r\n' | head -c 64)
+
+		case "$ntype" in
+			ssh|telnet) ;;
+			*) ntype=plugin ;;
+		esac
+
+		if [ "$ntype" = "plugin" ]; then
+			case "$url" in
+				http://*|https://*) ;;
+				*) sm_fail '400 Bad Request' '插件节点地址需要以 http:// 或 https:// 开头' ;;
+			esac
+			url=${url%/}
+			nhost=""
+			nport=0
+			[ -n "$name" ] || name="$url"
+			for s in $(sm_node_sections); do
+				[ "$(uci -q get "systemmon.$s.url" 2>/dev/null)" = "$url" ] &&
+					sm_fail '409 Conflict' '该节点已存在'
+			done
+		else
+			[ -n "$nhost" ] || sm_fail '400 Bad Request' '请填写节点地址'
+			[ "$nport" = "0" ] && { [ "$ntype" = "ssh" ] && nport=22 || nport=23; }
+			url=""
+			[ -n "$name" ] || name="$nhost"
+			for s in $(sm_node_sections); do
+				[ "$(uci -q get "systemmon.$s.type" 2>/dev/null)" = "$ntype" ] &&
+				[ "$(uci -q get "systemmon.$s.host" 2>/dev/null)" = "$nhost" ] &&
+				[ "$(uci -q get "systemmon.$s.port" 2>/dev/null)" = "$nport" ] &&
+					sm_fail '409 Conflict' '该节点已存在'
+			done
+		fi
+
+		sid_new=$(uci add systemmon node 2>/dev/null)
+		if [ -z "$sid_new" ]; then
+			sid_new="node_$(date +%s)"
+			uci -q set "systemmon.$sid_new=node"
+		fi
+		uci -q set "systemmon.$sid_new.name=$name"
+		uci -q set "systemmon.$sid_new.type=$ntype"
+		[ -n "$url" ] && uci -q set "systemmon.$sid_new.url=$url"
+		[ -n "$nhost" ] && uci -q set "systemmon.$sid_new.host=$nhost"
+		[ "$nport" != "0" ] && uci -q set "systemmon.$sid_new.port=$nport"
+		[ -n "$nuser" ] && uci -q set "systemmon.$sid_new.user=$nuser"
+		[ -n "$npass" ] && uci -q set "systemmon.$sid_new.password=$npass"
+		uci -q set "systemmon.$sid_new.enabled=1"
+		;;
+	node_del)
+		sec=$(sm_form_val section)
+		[ "$(uci -q get "systemmon.$sec" 2>/dev/null)" = "node" ] ||
+			sm_fail '400 Bad Request' '目标不是节点'
+		uci -q delete "systemmon.$sec"
+		;;
+	ignore)
+		addr=$(sm_clean_addr "$(sm_form_val address)")
+		[ -n "$addr" ] || sm_fail '400 Bad Request' '缺少地址'
+		uci -q add_list systemmon.main.ignore="$addr"
+		;;
+	unignore)
+		addr=$(sm_clean_addr "$(sm_form_val address)")
+		[ -n "$addr" ] || sm_fail '400 Bad Request' '缺少地址'
+		uci -q del_list systemmon.main.ignore="$addr"
+		;;
+	set)
+		if sm_has_field scan_interval; then
+			uci -q set systemmon.main.scan_interval="$(sm_clean_uint "$(sm_form_val scan_interval)" 10 3600 120)"
+		fi
+		if sm_has_field scan_max; then
+			uci -q set systemmon.main.scan_max="$(sm_clean_uint "$(sm_form_val scan_max)" 1 2048 512)"
+		fi
+		if sm_has_field scan_subnet; then
+			v=$(sm_form_val scan_subnet | sed 's/[^0-9.,\/ ]//g' | head -c 100)
+			uci -q set systemmon.main.scan_subnet="$v"
+		fi
+		if sm_has_field refresh; then
+			uci -q set systemmon.main.refresh="$(sm_clean_uint "$(sm_form_val refresh)" 1 60 3)"
+		fi
+		if sm_has_field device_interval; then
+			uci -q set systemmon.main.device_interval="$(sm_clean_uint "$(sm_form_val device_interval)" 1 3600 30)"
+		fi
+		if sm_has_field ping_timeout; then
+			uci -q set systemmon.main.ping_timeout="$(sm_clean_uint "$(sm_form_val ping_timeout)" 1 10 1)"
+		fi
+		if sm_has_field max_devices; then
+			uci -q set systemmon.main.max_devices="$(sm_clean_uint "$(sm_form_val max_devices)" 1 256 32)"
+		fi
+		if sm_has_field discover_leases; then
+			v=$(sm_form_val discover_leases)
+			uci -q set systemmon.main.discover_leases="$([ "$v" = "1" ] && echo 1 || echo 0)"
+		fi
+		if sm_has_field discover_arp; then
+			v=$(sm_form_val discover_arp)
+			uci -q set systemmon.main.discover_arp="$([ "$v" = "1" ] && echo 1 || echo 0)"
+		fi
+		if sm_has_field auth_user; then
+			uci -q set systemmon.main.auth_user="$(sm_clean_name "$(sm_form_val auth_user)")"
+		fi
+		if sm_has_field auth_password; then
+			v=$(sm_form_val auth_password | tr -d '\r\n' | head -c 64)
+			# 留空表示保持原密码不变
+			[ -n "$v" ] && uci -q set systemmon.main.auth_password="$v"
+		fi
+		if sm_has_field allow_cidr; then
+			v=$(sm_form_val allow_cidr | sed 's/[^0-9.,\/ ]//g' | head -c 200)
+			uci -q set systemmon.main.allow_cidr="$v"
+		fi
+		if sm_has_field pon_enabled; then
+			v=$(sm_form_val pon_enabled)
+			uci -q set systemmon.pon.enabled="$([ "$v" = "1" ] && echo 1 || echo 0)"
+		fi
+		if sm_has_field pon_device; then
+			uci -q set systemmon.pon.device="$(sm_clean_addr "$(sm_form_val pon_device)")"
+		fi
+		if sm_has_field pon_sfp_iface; then
+			uci -q set systemmon.pon.sfp_iface="$(sm_clean_addr "$(sm_form_val pon_sfp_iface)")"
+		fi
+		if sm_has_field pon_command; then
+			uci -q set systemmon.pon.command="$(sm_form_val pon_command | tr -d '\r\n' | head -c 200)"
+		fi
+		;;
+	'')
+		sm_fail '400 Bad Request' '缺少 action'
+		;;
+	*)
+		sm_fail '400 Bad Request' '未知 action'
+		;;
+esac
+
+uci -q commit systemmon
+
+# 配置变了，丢弃对应缓存，下一次请求重新采集
+case "$action" in
+	add|del|set) rm -f "$SM_TMP/devices.json" "$SM_TMP/devices.ts" ;;
+esac
+case "$action" in
+	set) rm -f "$SM_TMP/discover.json" "$SM_TMP/discover.ts" ;;
+esac
+
+sm_headers
+printf '{"ok":true'
+[ -n "$sid_new" ] && printf ',"section":"%s"' "$(sm_jstr "$sid_new")"
+printf '}\n'
