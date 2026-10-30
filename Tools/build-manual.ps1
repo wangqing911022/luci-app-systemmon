@@ -18,7 +18,7 @@ if (-not $OutDir)    { $OutDir    = Join-Path $here '..\dist' }
 
 $SourceDir = [System.IO.Path]::GetFullPath($SourceDir)
 $OutDir    = [System.IO.Path]::GetFullPath($OutDir)
-$ver = '1.3.0'
+$ver = '1.3.1'
 $name = "systemmon-$ver"
 
 $stage = Join-Path $OutDir '_manual'

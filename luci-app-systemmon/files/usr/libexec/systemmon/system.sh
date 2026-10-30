@@ -192,6 +192,15 @@ sm_temps_raw() { # 输出 name|摄氏度
 		done
 		[ "$i" -ge 8 ] && break
 	done
+
+	# MTK 私有驱动（mt7916_ap 等）不注册 thermal zone，温度只在 iwpriv 的统计里
+	wn=$(ls /sys/class/net 2>/dev/null | grep "^wlan" | head -n 1)
+	if [ -n "$wn" ] && command -v iwpriv >/dev/null 2>&1; then
+		wv=$(iwpriv "$wn" stat 2>/dev/null |
+			sed -n 's/^[[:space:]]*CurrentTemperature[[:space:]]*=[[:space:]]*\(-\{0,1\}[0-9][0-9]*\).*/\1/p' |
+			head -n 1)
+		[ -n "$wv" ] && printf 'Wi-Fi|%s\n' "$wv"
+	fi
 }
 
 sm_temps_json() {

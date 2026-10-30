@@ -288,14 +288,14 @@ exit 0
 "@
 
 Write-Host "[1/2] systemmon"
-New-Ipk -PkgName 'systemmon' -Version '1.3.0-1' -Depends @('libc', 'uhttpd') `
+New-Ipk -PkgName 'systemmon' -Version '1.3.1-1' -Depends @('libc', 'uhttpd') `
     -Section 'admin' `
     -Description '本机与局域网设备状态监控：CPU、内存、温度、PON 光功率，Web 端口 7752' `
     -SourceDir $SourceDir -FileRoot (Join-Path $SourceDir 'files') -ModeRule 'systemmon' `
     -Postinst $postinst -Prerm $prerm -Conffiles @('/etc/config/systemmon') -OutDir $OutDir | Out-Null
 
 Write-Host "[2/2] luci-app-systemmon"
-New-Ipk -PkgName 'luci-app-systemmon' -Version '1.3.0-1' -Depends @('libc', 'systemmon', 'luci-base') `
+New-Ipk -PkgName 'luci-app-systemmon' -Version '1.3.1-1' -Depends @('libc', 'systemmon', 'luci-base') `
     -Section 'luci' `
     -Description 'LuCI 菜单入口：状态 -> 设备监控' `
     -SourceDir $SourceDir -FileRoot (Join-Path $SourceDir 'luci') -ModeRule 'luci' `

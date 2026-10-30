@@ -16,6 +16,7 @@
 | CPU 占用 / 各核心 / 负载 | `/proc/stat`、`/proc/loadavg`（两次采样做差） |
 | 内存 / 交换 | `/proc/meminfo` |
 | SoC 温度 | `/sys/class/thermal/thermal_zone*/temp`，退化为 `hwmon` |
+| Wi-Fi 芯片温度 | MTK 私有驱动（`mt7916_ap` 等）不注册 thermal zone，改为读 `iwpriv wlanX stat` 的 `CurrentTemperature` |
 | PON 温度、Rx/Tx 光功率 | `ponctl --device ponX status --json`（固件自带 `airoha-ponctl`）；无 ponctl 时可退回 `ethtool -m` / `hwmon` / 自定义命令 |
 | 网口速率 | `/proc/net/dev` |
 | 局域网设备 | 扫描 br-* 网段（并发 ping）+ ARP 表 + DHCP 租约，确认后加入监控；ICMP 或 TCP 端口探测 |
@@ -52,9 +53,9 @@ src-git systemmon https://github.com/wangqing911022/luci-app-systemmon.git
 因为官方 24.10 SDK 仍是 opkg，只能出 ipk）：
 
 ```sh
-scp systemmon-1.3.0-r1.apk luci-app-systemmon-1.3.0-r1.apk root@192.168.1.1:/tmp/
+scp systemmon-1.3.1-r1.apk luci-app-systemmon-1.3.1-r1.apk root@192.168.1.1:/tmp/
 ssh root@192.168.1.1
-apk add --allow-untrusted /tmp/systemmon-1.3.0-r1.apk /tmp/luci-app-systemmon-1.3.0-r1.apk
+apk add --allow-untrusted /tmp/systemmon-1.3.1-r1.apk /tmp/luci-app-systemmon-1.3.1-r1.apk
 ```
 
 如果设备上带 `apk mkpkg`，也可以直接在路由器上打包：
@@ -69,12 +70,12 @@ Windows 本机无需工具链即可打包：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File Tools/build-ipk.ps1
-# 产物：dist/systemmon_1.3.0-1_all.ipk
-#       dist/luci-app-systemmon_1.3.0-1_all.ipk
+# 产物：dist/systemmon_1.3.1-1_all.ipk
+#       dist/luci-app-systemmon_1.3.1-1_all.ipk
 ```
 
 ```sh
-opkg install systemmon_1.3.0-1_all.ipk luci-app-systemmon_1.3.0-1_all.ipk
+opkg install systemmon_1.3.1-1_all.ipk luci-app-systemmon_1.3.1-1_all.ipk
 ```
 
 安装后服务会自动启用并启动；手动操作：
@@ -89,15 +90,15 @@ opkg install systemmon_1.3.0-1_all.ipk luci-app-systemmon_1.3.0-1_all.ipk
 适合 apk 系固件、没有 LuCI 的精简固件、或不想等 CI 的场景。纯文件拷贝，不注册包管理器。
 
 ```powershell
-# PC 上生成（产物在 dist/systemmon-1.3.0-manual.tar.gz）
+# PC 上生成（产物在 dist/systemmon-1.3.1-manual.tar.gz）
 powershell -ExecutionPolicy Bypass -File Tools/build-manual.ps1
 ```
 
 ```sh
-scp dist/systemmon-1.3.0-manual.tar.gz root@目标IP:/tmp/
+scp dist/systemmon-1.3.1-manual.tar.gz root@目标IP:/tmp/
 ssh root@目标IP
-cd /tmp && tar -xzf systemmon-1.3.0-manual.tar.gz
-sh systemmon-1.3.0/install.sh
+cd /tmp && tar -xzf systemmon-1.3.1-manual.tar.gz
+sh systemmon-1.3.1/install.sh
 ```
 
 安装脚本会自动停止旧实例、复制文件、设置权限、`enable` 并启动，最后自检并打印访问地址。
@@ -106,7 +107,7 @@ sh systemmon-1.3.0/install.sh
 卸载（`--purge` 连配置一起删）：
 
 ```sh
-sh systemmon-1.3.0/uninstall.sh
+sh systemmon-1.3.1/uninstall.sh
 ```
 
 ## 装到别的路由器时要注意
