@@ -242,13 +242,24 @@
     // 温度
     var temps = d.temperatures || [];
     var maxTemp = null, maxName = '';
+    var cpuTemp = null, cpuName = '';
     for (var t = 0; t < temps.length; t++) {
       var tv = Number(temps[t].value);
       if (!isFinite(tv)) continue;
-      if (maxTemp === null || tv > maxTemp) { maxTemp = tv; maxName = temps[t].name; }
+      var tn = String(temps[t].name || '');
+      if (maxTemp === null || tv > maxTemp) { maxTemp = tv; maxName = tn; }
+      // 这张卡叫「CPU 温度」，应取 CPU/SoC 传感器；没有这类传感器时才退回最高值，
+      // 否则 Wi-Fi 芯片温度更高时会把 CPU 温度顶掉。
+      if (/^(cpu|soc|tsens)/i.test(tn) && (cpuTemp === null || tv > cpuTemp)) {
+        cpuTemp = tv;
+        cpuName = tn;
+      }
     }
-    setText('kpiTemp', maxTemp === null ? '—' : num(maxTemp) + '°C');
-    setText('kpiTempSub', maxName || '无温度传感器');
+    var shownTemp = cpuTemp === null ? maxTemp : cpuTemp;
+    var shownName = cpuTemp === null ? maxName : cpuName;
+    setText('kpiTemp', shownTemp === null ? '—' : num(shownTemp) + '°C');
+    setText('kpiTempSub', shownName || '无温度传感器');
+
     setText('tempCount', temps.length + ' 个传感器');
 
     var tlist = $('tempList');
