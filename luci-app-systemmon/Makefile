@@ -8,7 +8,7 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=systemmon
-PKG_VERSION:=1.3.2
+PKG_VERSION:=1.3.3
 PKG_RELEASE:=1
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=WQ
@@ -109,8 +109,8 @@ endef
 define Package/luci-app-systemmon/install
 	$(INSTALL_DIR) $(1)/usr/share/luci/menu.d
 	$(INSTALL_DATA) ./luci/usr/share/luci/menu.d/luci-app-systemmon.json $(1)/usr/share/luci/menu.d/
-	$(INSTALL_DIR) $(1)/usr/share/luci-static/resources/view/systemmon
-	$(INSTALL_DATA) ./luci/usr/share/luci-static/resources/view/systemmon/overview.js $(1)/usr/share/luci-static/resources/view/systemmon/
+	$(INSTALL_DIR) $(1)/www/luci-static/resources/view/systemmon
+	$(INSTALL_DATA) ./luci/www/luci-static/resources/view/systemmon/overview.js $(1)/www/luci-static/resources/view/systemmon/
 endef
 
 $(eval $(call BuildPackage,systemmon))
