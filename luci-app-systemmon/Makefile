@@ -8,7 +8,7 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=systemmon
-PKG_VERSION:=1.3.3
+PKG_VERSION:=1.3.4
 PKG_RELEASE:=1
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=WQ
@@ -111,6 +111,14 @@ define Package/luci-app-systemmon/install
 	$(INSTALL_DATA) ./luci/usr/share/luci/menu.d/luci-app-systemmon.json $(1)/usr/share/luci/menu.d/
 	$(INSTALL_DIR) $(1)/www/luci-static/resources/view/systemmon
 	$(INSTALL_DATA) ./luci/www/luci-static/resources/view/systemmon/overview.js $(1)/www/luci-static/resources/view/systemmon/
+endef
+
+# 包内文件的 mtime 是构建时间（可复现构建里常为 1970），浏览器会按启发式规则长期缓存；
+# 安装时更新一次 mtime，让之后的普通刷新就能拿到新视图。
+define Package/luci-app-systemmon/postinst
+#!/bin/sh
+[ -n "$${IPKG_INSTROOT}" ] || touch /www/luci-static/resources/view/systemmon/overview.js 2>/dev/null
+exit 0
 endef
 
 $(eval $(call BuildPackage,systemmon))
