@@ -129,6 +129,7 @@ sm_devices_json() {
 		printf '%s\n' "$SM_UP" >"$SM_TMP/dev.lock/ts" 2>/dev/null
 		# 选出最久没探过的 batch 台（在 awk 里排序，避免 sort/head/cut 在 busybox 上的兼容问题）
 		awk -F'\t' -v now="$SM_UP" -v iv="$interval" -v max="$batch" '
+			$1 !~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/ { next }
 			$9 == 0 || now - $9 >= iv {
 				n++
 				k[n] = $9 + 0; a[n] = $1; b[n] = $3; c[n] = $4
@@ -166,6 +167,7 @@ sm_devices_json() {
 
 			awk -F'\t' -v OFS='\t' -v now="$SM_UP" -v epoch="$SM_NOW" '
 				FILENAME == ARGV[1] { on[$1] = $2; rt[$1] = $3; next }
+				$1 !~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/ { next }
 				{
 					if ($1 in on) {
 						$6 = on[$1]; $7 = rt[$1]; $9 = now
@@ -190,6 +192,8 @@ sm_devices_json() {
 			next
 		}
 		{
+			# 状态文件里混进空行/脏行时直接丢弃，不要让它们变成"没有 IP 和 MAC 的设备"
+			if ($1 !~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/) next
 			n++
 			buf[n] = sprintf("{\"name\":\"%s\",\"ip\":\"%s\",\"mac\":\"%s\",\"type\":\"%s\",\"port\":%d,\"source\":\"%s\",\"iface\":\"%s\",\"online\":%s,\"rtt\":%.1f,\"last_seen\":%d,\"probed\":%s}",
 				esc($2), esc($1), esc(mac[$1]), esc($3), $4 + 0, esc($5), esc(aif[$1]),
