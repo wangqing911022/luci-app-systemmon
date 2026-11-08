@@ -4,13 +4,15 @@
 # 目标设备不需要安装本插件，只要开着 SSH 或 Telnet，并且是 busybox/Linux shell，
 # 就能取到 CPU、内存、温度、PON（若目标有 ponctl 或 opticaltst）。
 #
-# 采集分四段命令发送，用 @@S1/@@S2/@@MEM/@@TEMP/@@PON/@@INFO/@@END 分段。
+# 采集分五段命令发送，用 @@S1/@@S2/@@MEM/@@TEMP/@@PON/@@INFO/@@END 分段。
 
 sm_agent_l1='echo @@CPU; cat /proc/cpuusage 2>/dev/null; echo @@S1; cat /proc/stat; echo @@S2; [ -r /proc/cpuusage ] || sleep 2; cat /proc/stat; echo @@MEM; head -c 4096 /proc/meminfo'
 sm_agent_l2='echo @@TEMP; cat /proc/tempsensor 2>/dev/null; for z in /sys/class/thermal/thermal_zone*; do [ -r "$z/temp" ] && echo "$(cat $z/type 2>/dev/null)|$(cat $z/temp 2>/dev/null)"; done'
-# 第二段：Wi-Fi 芯片温度（MTK 私有驱动）+ PON。仍处在 @@TEMP 段内。
+# 第二段：Wi-Fi 芯片温度（MTK 私有驱动）。仍处在 @@TEMP 段内。
 # 注意 printf 前面那个 \n：telnet 关回显后提示符 "/ # " 会留在行首，不换行会拼进传感器名字。
-sm_agent_l2b='i=$(ls /sys/class/net 2>/dev/null | grep "^wlan" | head -n 1); if [ -n "$i" ] && command -v iwpriv >/dev/null 2>&1; then v=$(iwpriv "$i" stat 2>/dev/null | sed -n "s/^[[:space:]]*CurrentTemperature[[:space:]]*=[[:space:]]*\(-\{0,1\}[0-9][0-9]*\).*/\1/p" | head -n 1); [ -n "$v" ] && printf "\nWi-Fi|%s\n" "$v"; fi; echo @@PON; { command -v ponctl >/dev/null 2>&1 && d=$(ponctl list 2>/dev/null | sed -n "s/^device=\([^ ]*\).*/\1/p" | head -n 1) && [ -n "$d" ] && ponctl --device "$d" status --json; }; command -v opticaltst >/dev/null 2>&1 && opticaltst -getpara 2>/dev/null; true'
+sm_agent_l2b='i=$(ls /sys/class/net 2>/dev/null | grep "^wlan" | head -n 1); if [ -n "$i" ] && command -v iwpriv >/dev/null 2>&1; then v=$(iwpriv "$i" stat 2>/dev/null | sed -n "s/^[[:space:]]*CurrentTemperature[[:space:]]*=[[:space:]]*\(-\{0,1\}[0-9][0-9]*\).*/\1/p" | head -n 1); [ -n "$v" ] && printf "\nWi-Fi|%s\n" "$v"; fi'
+# 第三段：Wi-Fi 芯片温度（QCA 厂商栈，thermaltool）+ PON。温度名按信道区分 2.4G/5G。
+sm_agent_l2c='if command -v thermaltool >/dev/null 2>&1; then for w in $(ls /sys/class/net 2>/dev/null | grep "^wifi"); do t=$(thermaltool -i $w -get 2>/dev/null | sed -n "s/.*sensor temperature: *\(-\{0,1\}[0-9][0-9]*\).*/\1/p" | head -n 1); [ -n "$t" ] && [ "$t" -ne 0 ] 2>/dev/null || continue; c=$(iw dev $w info 2>/dev/null | sed -n "s/.*channel \([0-9][0-9]*\).*/\1/p" | head -n 1); l="$w"; [ -n "$c" ] && [ "$c" -le 14 ] 2>/dev/null && l="Wi-Fi 2.4G"; [ -n "$c" ] && [ "$c" -gt 14 ] 2>/dev/null && l="Wi-Fi 5G"; printf "\n%s|%s\n" "$l" "$t"; done; fi; echo @@PON; { command -v ponctl >/dev/null 2>&1 && d=$(ponctl list 2>/dev/null | sed -n "s/^device=\([^ ]*\).*/\1/p" | head -n 1) && [ -n "$d" ] && ponctl --device "$d" status --json; }; command -v opticaltst >/dev/null 2>&1 && opticaltst -getpara 2>/dev/null; true'
 sm_agent_l3='echo @@INFO; echo "H=$(cat /proc/sys/kernel/hostname)"; echo "M=$(cat /tmp/sysinfo/model 2>/dev/null)"; echo "F=$(grep DISTRIB_DESCRIPTION /etc/openwrt_release 2>/dev/null)"; echo "K=$(uname -r)"; echo "A=$(uname -m)"; echo "U=$(cat /proc/uptime)"; echo "L=$(cat /proc/loadavg)"; echo @@END'
 
 # ---------------------------------------------------------------- 采集
@@ -33,6 +35,7 @@ sm_agent_ssh_raw() { # host port user pass
 		printf '%s\n' "$sm_agent_l1"
 		printf '%s\n' "$sm_agent_l2"
 		printf '%s\n' "$sm_agent_l2b"
+		printf '%s\n' "$sm_agent_l2c"
 		printf '%s\n' "$sm_agent_l3"
 	} >"$script"
 
@@ -75,7 +78,7 @@ sm_agent_telnet_raw() { # host port user pass
 		sm_sleep 2
 		printf 'stty -echo 2>/dev/null\r\n'
 		sm_sleep 1
-		printf '%s\r\n%s\r\n%s\r\n%s\r\n' "$sm_agent_l1" "$sm_agent_l2" "$sm_agent_l2b" "$sm_agent_l3"
+		printf '%s\r\n%s\r\n%s\r\n%s\r\n%s\r\n' "$sm_agent_l1" "$sm_agent_l2" "$sm_agent_l2b" "$sm_agent_l2c" "$sm_agent_l3"
 		i=0
 		while [ ! -f "$fin" ] && [ "$i" -lt 25 ]; do
 			sm_sleep 1
