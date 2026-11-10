@@ -47,7 +47,11 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential gawk gettext libncurses-dev \
-            unzip file wget rsync zstd python3
+            unzip file wget rsync zstd python3 coreutils
+          echo "== host tools =="
+          echo "install: $(command -v install || echo MISSING)"
+          install --version 2>&1 | head -n 1 || true
+          echo "gmake: $(gmake --version 2>/dev/null | head -n 1)"
 
       - name: 下载并解压 SDK
         run: |
