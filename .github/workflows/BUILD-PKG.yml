@@ -24,17 +24,21 @@ permissions:
 jobs:
   build:
     name: ${{ matrix.name }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
+          # 23.05 SDK 的前置检查要求 GNU install；ubuntu-latest 已换成 uutils coreutils，
+          # 版本串里没有 "GNU"，所以这一档固定在 22.04。
           - name: ipk
+            os: ubuntu-22.04
             kind: ipk
             sdk_url: https://downloads.openwrt.org/releases/23.05.5/targets/x86/64/openwrt-sdk-23.05.5-x86-64_gcc-12.3.0_musl.Linux-x86_64.tar.xz
             sdk_flag: -xJf
             sdk_file: sdk.tar.xz
           - name: apk
+            os: ubuntu-latest
             kind: apk
             sdk_url: ''
             sdk_flag: --zstd -xf
